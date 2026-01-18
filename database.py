@@ -12,11 +12,16 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
-    """Создаёт подключение к PostgreSQL через DATABASE_URL"""
+    """
+    Создаёт подключение к PostgreSQL через DATABASE_URL.
+    Добавлены параметры sslmode для совместимости с Railway.
+    """
     if not DATABASE_URL:
         raise ValueError("❌ Переменная DATABASE_URL не установлена")
     try:
-        conn = psycopg2.connect(DATABASE_URL)
+        # Важно: добавляем sslmode=require к URL для Railway
+        # Это обеспечивает правильное SSL-подключение к БД от Railway
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
         logger.info("✅ Подключение к БД успешно")
         return conn
     except Exception as e:
@@ -66,11 +71,15 @@ def create_tables_if_not_exists():
 
 def populate_topics_from_structure():
     """Заполняет таблицу topics из DevOps Структура.md"""
-    if not os.path.exists("DevOps Структура.md"):
-        logger.warning("⚠️ Файл 'DevOps Структура.md' не найден")
+    # Убедитесь, что файл находится в той же директории, что и db.py, или укажите правильный путь.
+    # Если файл будет в репозитории, он должен быть доступен в файловой системе Railway.
+    structure_file_path = "DevOps Структура.md" # Убедитесь, что имя файла совпадает с тем, что в репозитории
+    
+    if not os.path.exists(structure_file_path):
+        logger.warning(f"⚠️ Файл '{structure_file_path}' не найден")
         return
 
-    with open("DevOps Структура.md", "r", encoding="utf-8") as f:
+    with open(structure_file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
     topics = []
@@ -84,7 +93,9 @@ def populate_topics_from_structure():
                 if match:
                     module_id = int(match.group(1))
                     topic_num = int(match.group(2))
-                    title = topic.split("_", 1)[1].replace("_", " ").title()
+                    # Используем оставшуюся часть строки после mXtY как заголовок
+                    title_part = topic.split('_', 2)[-1] if '_' in topic.split('_', 2) else topic
+                    title = title_part.replace("_", " ").title()
                     filepath = f"module_{module_id}/{topic}.md"
                     topics.append((module_id, topic, title, filepath, topic_num))
             # Ключевые моменты: km0_Ключевые_моменты
@@ -92,7 +103,8 @@ def populate_topics_from_structure():
                 match = re.match(r"km(\d+)", topic)
                 if match:
                     module_id = int(match.group(1))
-                    title = topic.split("_", 1)[1].replace("_", " ").title()
+                    title_part = topic.split('_', 1)[-1] if '_' in topic.split('_', 1) else topic
+                    title = title_part.replace("_", " ").title()
                     filepath = f"module_{module_id}/{topic}.md"
                     topics.append((module_id, topic, title, filepath, 100))
             # Тест: testm0_Тестирование
@@ -100,7 +112,8 @@ def populate_topics_from_structure():
                 match = re.match(r"testm(\d+)", topic)
                 if match:
                     module_id = int(match.group(1))
-                    title = topic.split("_", 1)[1].replace("_", " ").title()
+                    title_part = topic.split('_', 1)[-1] if '_' in topic.split('_', 1) else topic
+                    title = title_part.replace("_", " ").title()
                     filepath = f"module_{module_id}/{topic}.md"
                     topics.append((module_id, topic, title, filepath, 101))
             # Проекты: p0_Название
@@ -108,13 +121,15 @@ def populate_topics_from_structure():
                 match = re.match(r"p(\d+)", topic)
                 if match:
                     module_id = int(match.group(1))
-                    title = topic.split("_", 1)[1].replace("_", " ").title()
+                    title_part = topic.split('_', 1)[-1] if '_' in topic.split('_', 1) else topic
+                    title = title_part.replace("_", " ").title()
                     filepath = f"projects/{topic}.md"
                     topics.append((module_id, topic, title, filepath, 200))
             # Финальный проект: final_project_...
             elif topic.startswith("final_project"):
                 module_id = 999
-                title = topic.replace("_", " ").title()
+                title_part = topic.split('_', 1)[-1] if '_' in topic.split('_', 1) else topic
+                title = title_part.replace("_", " ").title()
                 filepath = f"final_project/{topic}.md"
                 topics.append((module_id, topic, title, filepath, 300))
 
