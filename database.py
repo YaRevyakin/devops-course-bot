@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Подключение к БД через переменную окружения (работает и на Railway, и на Render)
-DATABASE_URL = os.getenv("postgresql://postgres:GZfOrvNUQOAgebHShyHbnOutUsvJCZsL@postgres.railway.internal:5432/railway")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
     """Создаёт подключение к PostgreSQL через DATABASE_URL"""
