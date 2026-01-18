@@ -12,7 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Токен из переменной окружения или напрямую (для Render — лучше через env)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8226360790:AAH7DPXxvUinXEKnQBub7zExNb9uNkzaC78")
+BOT_TOKEN = os.getenv("8226360790:AAH7DPXxvUinXEKnQBub7zExNb9uNkzaC78")
 
 # Основное меню
 MAIN_MENU = [
