@@ -48,3 +48,45 @@ def mark_completed(tg_id: int, topic_code: str):
     conn.commit()
     cur.close()
     conn.close()
+
+# database.py — добавь эту функцию
+def get_module_keyboard(module_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    if module_id == 99:  # Проекты
+        cur.execute("""
+            SELECT code, title FROM topics 
+            WHERE code IN ('final_project', 'roadmap')
+            ORDER BY code
+        """)
+    else:
+        cur.execute("""
+            SELECT code, title FROM topics 
+            WHERE module = %s 
+            ORDER BY 
+                CASE type 
+                    WHEN 'topic' THEN 1
+                    WHEN 'practice' THEN 2
+                    WHEN 'keypoints' THEN 3
+                    WHEN 'test' THEN 4
+                END,
+                code
+        """, (module_id,))
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        return [["Назад"]]
+
+    buttons = []
+    row = []
+    for code, title in rows:
+        label = f"{code}: {title[:20]}..." if len(title) > 20 else f"{code}: {title}"
+        row.append(label)
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append(["Назад"])
+    return buttons    
