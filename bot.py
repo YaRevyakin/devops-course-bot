@@ -1,9 +1,10 @@
-# bot.py
 import logging
 import os
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from database import register_user, get_topic_by_code, mark_completed, CONTENT_DIR
+from database import register_user, get_topic_by_code, mark_completed, get_module_keyboard, initialize_database
+from flask import Flask
+from threading import Thread
 
 # Настройка логирования
 logging.basicConfig(
@@ -11,7 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Токен из переменной окружения или напрямую (для Render — лучше через env)
+# Токен бота
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8226360790:AAH7DPXxvUinXEKnQBub7zExNb9uNkzaC78")
 
 # Основное меню
@@ -66,7 +67,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Если это выбор модуля
     module_id = get_module_id(text)
     if module_id is not None:
-        from database import get_module_keyboard
         keyboard = get_module_keyboard(module_id)
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         await update.message.reply_text(f"📚 {text} — выбери тему:", reply_markup=reply_markup)
@@ -76,7 +76,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     code = text.split(':')[0].strip() if ':' in text else text
     topic = get_topic_by_code(code)
     if topic:
-        filepath = os.path.join(CONTENT_DIR, topic['filepath'])
+        filepath = os.path.join("content", topic['filepath'])
         if os.path.exists(filepath):
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
@@ -93,8 +93,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Неизвестная команда. Используй меню.")
 
-def main():
-    logger.info("🚀 Запуск бота...")
+def run_bot():
+    """Запуск Telegram-бота"""
+    logger.info("🚀 Запуск Telegram-бота...")
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
@@ -102,5 +103,21 @@ def main():
     logger.info("✅ Бот готов к работе")
     app.run_polling()
 
+# Flask-сервер для Render/Railway
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "DevOps Bot is running!", 200
+
 if __name__ == "__main__":
-    main()
+    # Инициализация БД при запуске
+    initialize_database()
+    
+    # Запуск бота в отдельном потоке
+    bot_thread = Thread(target=run_bot)
+    bot_thread.start()
+
+    # Запуск веб-сервера
+    port = int(os.getenv('PORT', 8000))
+    app.run(host='0.0.0.0', port=port)

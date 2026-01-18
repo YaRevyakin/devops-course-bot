@@ -2,29 +2,133 @@ import os
 import psycopg2
 import logging
 from psycopg2.extras import RealDictCursor
+import re
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Подключение к БД через отдельные параметры
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'dpg-d5m55u63jp1c739rt8lg-a.frankfurt-postgres.render.com'),
-    'port': int(os.getenv('DB_PORT', 5432)),
-    'database': os.getenv('DB_NAME', 'devops_course_db'),
-    'user': os.getenv('DB_USER', 'devops_course_db_user'),
-    'password': os.getenv('DB_PASSWORD', 'XxUp5L0WvQOyt415mPf6yBzxpILEl7HX')
-}
+# Подключение к БД через переменную окружения
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
-    """Создаёт подключение к PostgreSQL через параметры"""
+    """Создаёт подключение к PostgreSQL через DATABASE_URL"""
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = psycopg2.connect(DATABASE_URL)
         logger.info("✅ Подключение к БД успешно")
         return conn
     except Exception as e:
         logger.error(f"❌ Ошибка подключения к БД: {e}")
         raise
+
+def create_tables_if_not_exists():
+    """Создаёт таблицы, если их нет"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Таблица пользователей
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            tg_id INTEGER PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    # Таблица прогресса
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS progress (
+            tg_id INTEGER,
+            topic_code TEXT,
+            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (tg_id, topic_code),
+            FOREIGN KEY (tg_id) REFERENCES users(tg_id) ON DELETE CASCADE
+        );
+    """)
+
+    # Таблица тем
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS topics (
+            id SERIAL PRIMARY KEY,
+            module_id INTEGER NOT NULL,
+            code TEXT UNIQUE NOT NULL,
+            title TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            topic_order INTEGER DEFAULT 0
+        );
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def populate_topics_from_structure():
+    """Заполняет таблицу topics из DevOps Структура.md"""
+    if not os.path.exists("DevOps Структура.md"):
+        logger.warning("⚠️ Файл 'DevOps Структура.md' не найден")
+        return
+
+    with open("DevOps Структура.md", "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    topics = []
+    for line in lines:
+        line = line.strip()
+        if line.startswith("[[") and line.endswith("]]"):
+            topic = line[2:-2]
+            # Тема: m0t1_Что_такое_DevOps
+            if topic.startswith("m") and "t" in topic:
+                match = re.match(r"m(\d+)t(\d+)", topic)
+                if match:
+                    module_id = int(match.group(1))
+                    topic_num = int(match.group(2))
+                    title = topic.split("_", 1)[1].replace("_", " ").title()
+                    filepath = f"module_{module_id}/{topic}.md"
+                    topics.append((module_id, topic, title, filepath, topic_num))
+            # Ключевые моменты: km0_Ключевые_моменты
+            elif topic.startswith("km"):
+                match = re.match(r"km(\d+)", topic)
+                if match:
+                    module_id = int(match.group(1))
+                    title = topic.split("_", 1)[1].replace("_", " ").title()
+                    filepath = f"module_{module_id}/{topic}.md"
+                    topics.append((module_id, topic, title, filepath, 100))
+            # Тест: testm0_Тестирование
+            elif topic.startswith("testm"):
+                match = re.match(r"testm(\d+)", topic)
+                if match:
+                    module_id = int(match.group(1))
+                    title = topic.split("_", 1)[1].replace("_", " ").title()
+                    filepath = f"module_{module_id}/{topic}.md"
+                    topics.append((module_id, topic, title, filepath, 101))
+            # Проекты: p0_Название
+            elif topic.startswith("p"):
+                match = re.match(r"p(\d+)", topic)
+                if match:
+                    module_id = int(match.group(1))
+                    title = topic.split("_", 1)[1].replace("_", " ").title()
+                    filepath = f"projects/{topic}.md"
+                    topics.append((module_id, topic, title, filepath, 200))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    for t in topics:
+        cur.execute("""
+            INSERT INTO topics (module_id, code, title, filepath, topic_order)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (code) DO NOTHING;
+        """, t)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def initialize_database():
+    """Инициализирует БД: создаёт таблицы и заполняет темы"""
+    create_tables_if_not_exists()
+    populate_topics_from_structure()
+    logger.info("✅ База данных инициализирована")
 
 def register_user(tg_id: int, full_name: str):
     """Регистрирует или обновляет пользователя"""
