@@ -8,11 +8,13 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Подключение к БД через переменную окружения
-DATABASE_URL = os.getenv("postgresql://postgres:GZfOrvNUQOAgebHShyHbnOutUsvJCZsL@postgres.railway.internal:5432/railway")
+# Подключение к БД через переменную окружения (работает и на Railway, и на Render)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
     """Создаёт подключение к PostgreSQL через DATABASE_URL"""
+    if not DATABASE_URL:
+        raise ValueError("❌ Переменная DATABASE_URL не установлена")
     try:
         conn = psycopg2.connect(DATABASE_URL)
         logger.info("✅ Подключение к БД успешно")
@@ -109,6 +111,16 @@ def populate_topics_from_structure():
                     title = topic.split("_", 1)[1].replace("_", " ").title()
                     filepath = f"projects/{topic}.md"
                     topics.append((module_id, topic, title, filepath, 200))
+            # Финальный проект: final_project_...
+            elif topic.startswith("final_project"):
+                module_id = 999
+                title = topic.replace("_", " ").title()
+                filepath = f"final_project/{topic}.md"
+                topics.append((module_id, topic, title, filepath, 300))
+
+    if not topics:
+        logger.warning("⚠️ Не найдено тем в 'DevOps Структура.md'")
+        return
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -175,7 +187,7 @@ def get_module_keyboard(module_id: int):
     if module_id == 99:  # Проекты
         cur.execute("""
             SELECT title, code FROM topics
-            WHERE module_id = 99
+            WHERE module_id = 99 OR module_id = 999
             ORDER BY topic_order;
         """)
     else:
